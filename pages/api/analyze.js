@@ -20,39 +20,55 @@ export default async function handler(req, res) {
     // DOCX → TEXT
     const { value } = await mammoth.extractRawText({ buffer });
 
+    // अगर text empty है
+    if (!value || value.trim() === "") {
+      return res.status(400).json({
+        result: "❌ File read नहीं हो पाई। कृपया सही .docx file upload करें।",
+      });
+    }
+
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
 
     const prompt = `
-You are a professional survey designer.
+You are a professional survey designer and behavioral researcher.
 
-Analyze the survey:
+Analyze the survey below:
 
 ${value}
 
 For each question:
 - Improve clarity
-- Detect bias
-- Improve answer options
-- Suggest better structure
+- Detect bias or confusion
+- Improve answer options (non-overlapping)
+- Suggest best format (MCQ, Likert, etc.)
 
 Also:
-- Suggest survey type
-- Improve tone
+- Identify survey goal
+- Suggest best survey template
+- Improve tone (simple Hindi + English mix)
 
-Return structured output.
+Return in clear structured format.
 `;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-5.5",
-      messages: [{ role: "user", content: prompt }],
+    // ✅ NEW OpenAI API (working)
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: prompt,
     });
 
+    const output = response.output_text;
+
     res.status(200).json({
-      result: response.choices[0].message.content,
+      result: output || "⚠️ No response from AI",
     });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+
+  } catch (error) {
+    console.error("ERROR:", error);
+
+    res.status(500).json({
+      result: "❌ Error आया: " + error.message,
+    });
   }
 }
