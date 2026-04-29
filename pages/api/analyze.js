@@ -1,3 +1,5 @@
+import formidable from "formidable";
+import fs from "fs";
 import mammoth from "mammoth";
 import { OpenAI } from "openai";
 
@@ -9,21 +11,29 @@ export const config = {
 
 export default async function handler(req, res) {
   try {
-    const chunks = [];
+    const form = formidable({ multiples: false });
 
-    for await (const chunk of req) {
-      chunks.push(chunk);
+    const data = await new Promise((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) reject(err);
+        resolve({ fields, files });
+      });
+    });
+
+    const file = data.files.file;
+
+    if (!file) {
+      return res.status(400).json({ result: "❌ File नहीं मिली" });
     }
 
-    const buffer = Buffer.concat(chunks);
+    const buffer = fs.readFileSync(file.filepath);
 
     // DOCX → TEXT
     const { value } = await mammoth.extractRawText({ buffer });
 
-    // अगर text empty है
     if (!value || value.trim() === "") {
       return res.status(400).json({
-        result: "❌ File read नहीं हो पाई। कृपया सही .docx file upload करें।",
+        result: "❌ File empty है या read नहीं हो रही",
       });
     }
 
@@ -31,44 +41,27 @@ export default async function handler(req, res) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const prompt = `
-You are a professional survey designer and behavioral researcher.
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: `
+You are a survey expert.
 
-Analyze the survey below:
+Analyze this survey:
 
 ${value}
 
-For each question:
-- Improve clarity
-- Detect bias or confusion
-- Improve answer options (non-overlapping)
-- Suggest best format (MCQ, Likert, etc.)
-
-Also:
-- Identify survey goal
-- Suggest best survey template
-- Improve tone (simple Hindi + English mix)
-
-Return in clear structured format.
-`;
-
-    // ✅ NEW OpenAI API (working)
-    const response = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: prompt,
+Improve questions, detect issues, suggest better options and survey type.
+`,
     });
-
-    const output = response.output_text;
 
     res.status(200).json({
-      result: output || "⚠️ No response from AI",
+      result: response.output_text || "⚠️ No response",
     });
 
-  } catch (error) {
-    console.error("ERROR:", error);
-
+  } catch (err) {
+    console.error(err);
     res.status(500).json({
-      result: "❌ Error आया: " + error.message,
+      result: "❌ Error: " + err.message,
     });
   }
 }
