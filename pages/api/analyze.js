@@ -1,5 +1,3 @@
-import formidable from "formidable";
-import fs from "fs";
 import mammoth from "mammoth";
 import { OpenAI } from "openai";
 
@@ -11,33 +9,23 @@ export const config = {
 
 export default async function handler(req, res) {
   try {
-    const form = formidable({ multiples: false });
-
-    const data = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        resolve({ fields, files });
-      });
-    });
-
-    const fileKey = Object.keys(data.files)[0];
-    const file = data.files[fileKey];
-
-    if (!file) {
-      return res.status(400).json({ result: "❌ File नहीं मिली" });
+    // 🔹 raw request → buffer
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
     }
+    const buffer = Buffer.concat(chunks);
 
-    const buffer = fs.readFileSync(file.filepath);
-
-    // DOCX → TEXT
+    // 🔹 DOCX → TEXT
     const { value } = await mammoth.extractRawText({ buffer });
 
     if (!value || value.trim() === "") {
       return res.status(400).json({
-        result: "❌ File empty है या read नहीं हो रही",
+        result: "❌ File read नहीं हो पाई। Proper .docx upload करें",
       });
     }
 
+    // 🔹 OpenAI
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
@@ -45,13 +33,23 @@ export default async function handler(req, res) {
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
       input: `
-You are a survey expert.
+You are a professional survey designer.
 
-Analyze this survey:
+Analyze the survey below:
 
 ${value}
 
-Improve questions, detect issues, suggest better options and survey type.
+For each question:
+- Improve clarity
+- Detect bias
+- Improve answer options
+- Suggest better structure
+
+Also:
+- Suggest survey type
+- Improve tone
+
+Return clean structured output.
 `,
     });
 
@@ -60,7 +58,8 @@ Improve questions, detect issues, suggest better options and survey type.
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR:", err);
+
     res.status(500).json({
       result: "❌ Error: " + err.message,
     });
