@@ -1,5 +1,4 @@
 import mammoth from "mammoth";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const config = {
   api: {
@@ -25,44 +24,47 @@ export default async function handler(req, res) {
       });
     }
 
-    // Gemini setup
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-pro",
-    });
-
-    const prompt = `
+    // 🔥 Gemini REST API call
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `
 You are a professional survey designer.
 
 Analyze the survey below:
 
 ${value}
 
-For each question:
-- Improve clarity
-- Detect bias
-- Improve answer options
-- Suggest better structure
+Improve questions, detect issues, suggest better options and survey type.
+`,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
 
-Also:
-- Suggest survey type
-- Improve tone
+    const data = await response.json();
 
-Return clean structured output.
-`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const text =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "⚠️ No response";
 
     res.status(200).json({
-      result: text || "⚠️ No response",
+      result: text,
     });
-
   } catch (err) {
     console.error(err);
-
     res.status(500).json({
       result: "❌ Error: " + err.message,
     });
