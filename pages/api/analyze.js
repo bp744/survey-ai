@@ -1,5 +1,5 @@
 import mammoth from "mammoth";
-import { OpenAI } from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const config = {
   api: {
@@ -9,14 +9,14 @@ export const config = {
 
 export default async function handler(req, res) {
   try {
-    // 🔹 raw request → buffer
+    // raw request → buffer
     const chunks = [];
     for await (const chunk of req) {
       chunks.push(chunk);
     }
     const buffer = Buffer.concat(chunks);
 
-    // 🔹 DOCX → TEXT
+    // DOCX → TEXT
     const { value } = await mammoth.extractRawText({ buffer });
 
     if (!value || value.trim() === "") {
@@ -25,14 +25,14 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔹 OpenAI
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+    // Gemini setup
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
     });
 
-    const response = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: `
+    const prompt = `
 You are a professional survey designer.
 
 Analyze the survey below:
@@ -50,15 +50,18 @@ Also:
 - Improve tone
 
 Return clean structured output.
-`,
-    });
+`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
     res.status(200).json({
-      result: response.output_text || "⚠️ No response",
+      result: text || "⚠️ No response",
     });
 
   } catch (err) {
-    console.error("ERROR:", err);
+    console.error(err);
 
     res.status(500).json({
       result: "❌ Error: " + err.message,
