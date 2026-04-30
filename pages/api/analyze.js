@@ -20,7 +20,8 @@ export default async function handler(req, res) {
       });
     });
 
-    const file = data.files.file;
+    const fileKey = Object.keys(data.files)[0];
+    const file = data.files[fileKey];
 
     if (!file) {
       return res.status(400).json({ result: "❌ File नहीं मिली" });
