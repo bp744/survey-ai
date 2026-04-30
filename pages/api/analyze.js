@@ -56,9 +56,15 @@ Improve questions, detect issues, suggest better options and survey type.
 
     const data = await response.json();
 
-    const text =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "⚠️ No response";
+let text = "⚠️ No response";
+
+if (data.candidates && data.candidates.length > 0) {
+  const parts = data.candidates[0]?.content?.parts;
+
+  if (parts && parts.length > 0) {
+    text = parts.map(p => p.text).join("\n");
+  }
+}
 
     res.status(200).json({
       result: text,
